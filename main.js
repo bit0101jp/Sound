@@ -1,11 +1,9 @@
 let count;
-let width;
-let height;
 let scene;
 let camera;
 let renderer;
 let cube;
-let sphereVertices;
+let isPlaying;
 let audioCtx;
 let audioSrc;
 let audioBufferSrc;
@@ -13,40 +11,49 @@ let audioAnalyser;
 let waveArray;
 
 window.addEventListener("load", () => {
+
+  // カメラ、レンダラー、オブジェクトの生成
   initThree();
 
+  // 再生OFFにセット
+  isPlaying = false;
+
   document.getElementById("text-button").onclick = function() {
-    initAudio().then(data => {
-      onClick(data);
+    // サウンド再生中なら多重再生しない
+    if (isPlaying) return;
+
+    initAudio().then(buffer => {
+      onClick(buffer);
     });
   };
 });
 
-
-const initThree = () => {
-  width = window.innerWidth;
-  height = window.innerHeight;
+function initThree(){
+  let width = window.innerWidth;
+  let height = window.innerHeight;
 
   scene = new THREE.Scene();
 
   camera = new THREE.PerspectiveCamera(
-              45,
+              60,
               width / height,
               0.1,
               1000
   );
-  camera.position.z = 45;
+  camera.position.z = 200;
 
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-  // デバイスピクセル比に合わせる
-  renderer.setPixelRatio(window.devicePixelRatio);
 
-  renderer.setClearColor(0x000000, 0.0);
+  // レンダラーのサイズを調整する
+  renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(width, height);
-  // body直下にCanvasを配置
+
+  // レンダラーの背景色を設定
+  renderer.setClearColor(0x000000, 1.0);
+
+  // bodyにレンダラーを配置
   document.body.appendChild(renderer.domElement);
 
-  // create a cube
   let cubeGeometry= new THREE.BoxGeometry(4, 4, 4);
   let cubeMaterial = new THREE.MeshBasicMaterial({color: 0xff0000, wireframe: false});
   cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
@@ -61,63 +68,77 @@ const initThree = () => {
   renderer.render(scene, camera);
 };
 
-const initAudio = () =>
-  new Promise(resolve => {
-    // AudioContext の生成(Chorme, FireFox, Safari)
+function initAudio(){
+  return new Promise(resolve => {
+    // AudioContextの作成(Chorme, FireFox, Safari)
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    // サウンドデータ
+
+    // サウンドデータURL
     audioSrc = "https://dl.dropbox.com/s/au8wwx2h1hridta/Calvin%20Harris%20-%20josh%20pan.mp3?dl=0";
 
+    // AudioBufferSourceNodeの作成
     audioBufferSrc = audioCtx.createBufferSource();
+
+    // 高速フーリエ変換を行うためAnalyserNodeの作成
     audioAnalyser = audioCtx.createAnalyser();
 
+    // Ajaxを利用してサウンドデータを取得
     let request = new XMLHttpRequest();
     request.open("GET", audioSrc, true);
     request.responseType = "arraybuffer";
-    // 取得した音声データをデコード、その後、音声データをこの後の処理に渡す
-    request.onload = () => {
+
+    // サウンドデータ取得後、デコードしてbufferに渡す
+    request.onload = function() {
       audioCtx.decodeAudioData(request.response, buffer => resolve(buffer));
     };
     request.send();
   });
+}
 
-const setAudio = buffer => {
-  audioAnalyser.smoothingTimeConstant = 1.0;
+function setAudio(buffer){
+  // 0に近いほど描画の更新がスムーズになる(最大値1.0)
+  audioAnalyser.smoothingTimeConstant = 0.0;
 
-  // fftサイズを指定する
+  // 取得するデータのサイズを決める(デフォルト2048)
   audioAnalyser.fftSize = 2048;
 
-  // 渡ってきた音声データを音源として設定する
+  // 取得したサウンドデータを入力点となるAudioBufferSourceNodeに設定
   audioBufferSrc.buffer = buffer;
 
-  // 音源がループするように設定する
+  // サウンドがループするように設定
   audioBufferSrc.loop = true;
 
-  // 時間領域の波形データを格納する配列を生成
-  waveArray = new Uint8Array(audioAnalyser.frequencyBinCount);
+  // 時間領域の波形データを格納する配列を作成
+  let bufferLength =  audioAnalyser.frequencyBinCount;
+  waveArray = new Uint8Array(bufferLength);
 
-  // 音源を波形取得機能に接続
+  // AudioBufferSourceNodeをAnalyserNodeに接続
   audioBufferSrc.connect(audioAnalyser);
 
-  // 波形取得機能を出力機能に接続
+  // AnalyserNodeを出力点となるAudioDestinationNodeに接続
   audioAnalyser.connect(audioCtx.destination);
 
-  // サウンド再生スタート
-  audioBufferSrc.start(0);
+  // サウンド再生開始
+  audioBufferSrc.start();
 };
 
-const playAudio = () => {
+function playAudio(){
+  // サウンド再生中ON
+  isPlaying = true;
+
+  // 時間領域の波形データを取得して配列に格納
+  // (analyserNode.fftSize / 2の要素がwaveArrayに格納される)
   audioAnalyser.getByteTimeDomainData(waveArray);
 
-  // この時点での波形データの最大値を取得する
-  let number = waveArray.reduce((a, b) => Math.max(a, b));
+  // この実行時点での波形データの最大値を取得する
+  let maxValue = waveArray.reduce((a, b) => Math.max(a, b));
 
-  // 0 〜 255の値を正規化
-  number = number / 255;
+  // 最大値が255なので、0 - 255 の値を正規化
+  maxValue = maxValue / 255;
 
   // を2乗して 0.5 以上になるよう調整する
-//  amplitude = Math.pow(number, 2) + 0.5;
-  amplitude = Math.pow(number, 1) + 0.0;
+//  amplitude = Math.pow(maxValue, 2) + 0.5;
+  amplitude = Math.pow(maxValue, 1) + 0.0;
   console.log("amplitude: " + amplitude);
 
   count++;
@@ -132,7 +153,7 @@ const playAudio = () => {
   requestAnimationFrame(playAudio);
 };
 
-const onClick = buffer => {
+function onClick(buffer){
   setAudio(buffer);
   playAudio();
 };
