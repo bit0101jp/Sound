@@ -1,8 +1,9 @@
 let count;
 let scene;
+let width;
+let height;
 let camera;
 let renderer;
-let cube;
 let isPlaying;
 let audioCtx;
 let audioSrc;
@@ -10,10 +11,18 @@ let audioBufferSrc;
 let audioAnalyser;
 let waveArray;
 
-window.addEventListener("load", () => {
+let sphere = [];
+const sphereNum = 10;
 
-  // カメラ、レンダラー、オブジェクトの生成
-  initThree();
+window.addEventListener("load", () => {
+  initScene();
+  initCamera();
+  initLight();
+  initRenderer();
+  initObject();
+
+  count = 0;
+  renderer.render(scene, camera);
 
   // 再生OFFにセット
   isPlaying = false;
@@ -28,20 +37,40 @@ window.addEventListener("load", () => {
   };
 });
 
-function initThree(){
-  let width = window.innerWidth;
-  let height = window.innerHeight;
+function initScene(){
+  width = window.innerWidth;
+  height = window.innerHeight;
 
   scene = new THREE.Scene();
+}
 
+function initCamera(){
   camera = new THREE.PerspectiveCamera(
               60,
               width / height,
               0.1,
-              1000
+              2000
   );
-  camera.position.z = 200;
+  camera.position.z = 1200;
+}
 
+function initLight(){
+  // AmbientLight
+  const ambientLight = new THREE.AmbientLight(0xffffff);
+  scene.add(ambientLight);
+
+  // SpotLight
+  const spotLight = new THREE.SpotLight(0xffffff);
+  spotLight.position.set(-400, 1000, 200);
+  spotLight.castShadow = true;
+//  spotLight.angle = THREE.Math.degToRad(45);
+//  spotLight.target = cubeCore;
+  // spotLight.distance = 1400;
+  // spotLight.penumbra = 0.01;
+  scene.add(spotLight);
+}
+
+function initRenderer(){
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 
   // レンダラーのサイズを調整する
@@ -49,24 +78,27 @@ function initThree(){
   renderer.setSize(width, height);
 
   // レンダラーの背景色を設定
-  renderer.setClearColor(0x000000, 1.0);
+  renderer.setClearColor(0x000000, 0.0);
 
   // bodyにレンダラーを配置
   document.body.appendChild(renderer.domElement);
+}
 
-  let cubeGeometry= new THREE.BoxGeometry(4, 4, 4);
-  let cubeMaterial = new THREE.MeshBasicMaterial({color: 0xff0000, wireframe: false});
-  cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+function initObject(){
+  // 半径、経度分割数、緯度分割数
+  const sphereGeometry = new THREE.SphereGeometry(30, 24, 24);
 
-  cube.position.x = -4;
-  cube.position.y = 3;
-  cube.position.z = 0;
+  for (let i = 0; i < sphereNum; i++){
+    // roughnessは光沢感有無の調整。0:光沢感、1:マット感
+    const sphererMaterial = new THREE.MeshStandardMaterial({color: 0x6699FF, roughness:0.1});
+    sphere[i] = new THREE.Mesh(sphereGeometry, sphererMaterial);
+    sphere[i].position.x = i * 60;
+    sphere[i].position.y = 3;
+    sphere[i].position.z = 0;
 
-  scene.add(cube);
-
-  count = 0;
-  renderer.render(scene, camera);
-};
+    scene.add(sphere[i]);
+  }
+}
 
 function initAudio(){
   return new Promise(resolve => {
@@ -138,14 +170,18 @@ function playAudio(){
 
   // を2乗して 0.5 以上になるよう調整する
 //  amplitude = Math.pow(maxValue, 2) + 0.5;
-  amplitude = Math.pow(maxValue, 1) + 0.0;
-  console.log("amplitude: " + amplitude);
+  amplitude = Math.pow(maxValue, 2) + 0.0;
+  console.log("maxValue: " + maxValue + "  amplitude: " + amplitude);
 
   count++;
 //  if (count % 10 == 0){
 //  cube.rotation.z += (0.0010 + amplitude);
-    cube.scale.x = (0.0000 + amplitude * 10);
-    cube.scale.y = (0.0000 + amplitude * 10);
+//    for (let i = 0; i < sphereNum; i++){
+      let index = parseInt(Math.random() * sphereNum);
+      sphere[index].scale.x = amplitude * 10;
+      sphere[index].scale.y = amplitude * 10;
+//        sphere[i].position.x += amplitude * 10;
+//    }
 //    console.log(cube.position.x);
     renderer.render(scene, camera);
 //  }
